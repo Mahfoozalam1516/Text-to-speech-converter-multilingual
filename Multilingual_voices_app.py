@@ -1,57 +1,82 @@
 import streamlit as st
-from gtts import gTTS
-import os
-import tempfile
+import asyncio
+import edge_tts
+import io
 
-def text_to_speech(text, language, speed, pitch):
-    tts = gTTS(text=text, lang=language, slow=speed)
-    
-    # Save the audio to a temporary file
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
-        tts.save(fp.name)
-        return fp.name
+# Set page config at the very beginning
+st.set_page_config(page_title="Advanced Multilingual Text-to-Speech Converter", page_icon="🎤")
 
-def main():
-    st.title("Multilingual Text-to-Speech Converter")
+# Extended dictionary of voices with language codes
+VOICES = {
+    "English (US) - Male": "en-US-ChristopherNeural",
+    "English (US) - Female": "en-US-JennyNeural",
+    "English (UK) - Male": "en-GB-RyanNeural",
+    "English (UK) - Female": "en-GB-SoniaNeural",
+    "Spanish (Spain) - Male": "es-ES-AlvaroNeural",
+    "Spanish (Mexico) - Female": "es-MX-DaliaNeural",
+    "French (France) - Male": "fr-FR-HenriNeural",
+    "French (France) - Female": "fr-FR-DeniseNeural",
+    "German (Germany) - Male": "de-DE-ConradNeural",
+    "German (Germany) - Female": "de-DE-KatjaNeural",
+    "Italian (Italy) - Male": "it-IT-DiegoNeural",
+    "Italian (Italy) - Female": "it-IT-ElsaNeural",
+    "Japanese (Japan) - Male": "ja-JP-KeitaNeural",
+    "Japanese (Japan) - Female": "ja-JP-NanamiNeural",
+    "Chinese (Mandarin) - Male": "zh-CN-YunxiNeural",
+    "Chinese (Mandarin) - Female": "zh-CN-XiaoxiaoNeural",
+    "Hindi (India) - Male": "hi-IN-MadhurNeural",
+    "Hindi (India) - Female": "hi-IN-SwaraNeural",
+    "Arabic (Saudi Arabia) - Male": "ar-SA-HamedNeural",
+    "Russian (Russia) - Female": "ru-RU-SvetlanaNeural",
+    "Portuguese (Brazil) - Male": "pt-BR-AntonioNeural",
+    "Korean (Korea) - Female": "ko-KR-SunHiNeural"
+}
 
-    # Text input
-    text = st.text_area("Enter the text you want to convert to speech:")
+async def text_to_speech(text, voice, rate):
+    communicate = edge_tts.Communicate(text, voice, rate=rate)
+    audio_data = b""
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            audio_data += chunk["data"]
+    return audio_data
 
-    # Language selection
-    languages = {
-        'English': 'en', 'Spanish': 'es', 'French': 'fr', 'German': 'de',
-        'Italian': 'it', 'Portuguese': 'pt', 'Hindi': 'hi', 'Japanese': 'ja',
-        'Korean': 'ko', 'Chinese': 'zh-CN'
-    }
-    selected_language = st.selectbox("Select Language", list(languages.keys()))
+st.title("Advanced Multilingual Text-to-Speech Converter")
 
-    # Speed selection
-    speed = st.checkbox("Slow mode")
+text_input = st.text_area("Enter the text you want to convert to speech:", height=150)
+col1, col2 = st.columns(2)
+with col1:
+    voice_name = st.selectbox("Select a voice:", list(VOICES.keys()))
+with col2:
+    rate_option = st.selectbox("Select speech rate:", ["Very Slow", "Slow", "Normal", "Fast", "Very Fast"])
 
-    # Pitch selection (note: gTTS doesn't directly support pitch adjustment)
-    pitch = st.slider("Pitch", 0.5, 2.0, 1.0, 0.1)
-    st.write("Note: Pitch adjustment is not supported by gTTS and won't affect the output.")
+rate_map = {
+    "Very Slow": "-50%",
+    "Slow": "-25%",
+    "Normal": "+0%",
+    "Fast": "+25%",
+    "Very Fast": "+50%"
+}
 
-    if st.button("Convert to Speech"):
-        if text:
-            audio_file = text_to_speech(text, languages[selected_language], speed, pitch)
-            
-            # Play the audio
-            st.audio(audio_file)
-            
-            # Offer download option
-            with open(audio_file, "rb") as file:
-                btn = st.download_button(
-                    label="Download Audio",
-                    data=file,
-                    file_name="tts_output.mp3",
-                    mime="audio/mp3"
-                )
-            
-            # Clean up the temporary file
-            os.unlink(audio_file)
-        else:
-            st.warning("Please enter some text to convert.")
+if st.button("Convert to Speech"):
+    if text_input:
+        with st.spinner("Converting text to speech..."):
+            voice = VOICES[voice_name]
+            rate = rate_map[rate_option]
+            audio_data = asyncio.run(text_to_speech(text_input, voice, rate))
+            st.audio(audio_data, format="audio/wav")
+            st.success("Text-to-speech conversion completed!")
+    else:
+        st.warning("Please enter some text to convert.")
 
-if __name__ == "__main__":
-    main()
+st.sidebar.header("About")
+st.sidebar.info("This app uses edge-tts to convert text to speech in multiple languages with adjustable speech rates.")
+st.sidebar.header("Supported Languages")
+languages = set(lang.split(' - ')[0].split(' (')[0] for lang in VOICES.keys())
+st.sidebar.write("\n".join(f"- {lang}" for lang in sorted(languages)))
+
+st.sidebar.header("Features")
+st.sidebar.markdown("""
+- Multiple languages and voices
+- Adjustable speech rate
+- Male and female voices for most languages
+""")
