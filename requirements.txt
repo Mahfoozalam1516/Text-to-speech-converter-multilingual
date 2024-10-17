@@ -1,4 +1,2 @@
 streamlit
-asyncio
 edge_tts
-io
